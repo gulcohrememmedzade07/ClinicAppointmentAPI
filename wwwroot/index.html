@@ -1,0 +1,306 @@
+﻿<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klinika və Həkim Qəbulu Sistemi</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 30px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            text-align: center;
+            color: #0d6efd;
+            margin-bottom: 25px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+            .form-group.full {
+                grid-column: span 2;
+            }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        input, textarea {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+
+        .btn-save {
+            background-color: #198754;
+            color: white;
+        }
+
+            .btn-save:hover {
+                background-color: #157347;
+            }
+
+        .btn-cancel {
+            background-color: #6c757d;
+            color: white;
+            display: none;
+        }
+
+        .btn-edit {
+            background-color: #ffc107;
+            color: #000;
+            padding: 6px 12px;
+        }
+
+        .btn-delete {
+            background-color: #dc3545;
+            color: white;
+            padding: 6px 12px;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: none;
+            font-weight: 500;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #842029;
+            border: 1px solid #f5c2c7;
+        }
+
+        .alert-success {
+            background-color: #d1e7dd;
+            color: #0f5132;
+            border: 1px solid #badbcc;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        th {
+            background-color: #0d6efd;
+            color: white;
+        }
+
+        tr:hover {
+            background-color: #f1f5f9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🏥 Klinika Müayinə Sessiyaları</h1>
+
+        <div id="alertBox" class="alert"></div>
+
+        <form id="sessionForm">
+            <input type="hidden" id="sessionId">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Müayinənin Adı *</label>
+                    <input type="text" id="title" placeholder="Məs: Kardioloji Müayinə">
+                </div>
+                <div class="form-group">
+                    <label>Otaq Nömrəsi</label>
+                    <input type="text" id="roomNumber" placeholder="Məs: Otaq 102">
+                </div>
+                <div class="form-group">
+                    <label>Tarix və Saat *</label>
+                    <input type="datetime-local" id="sessionDate">
+                </div>
+                <div class="form-group">
+                    <label>Maksimum Pasiyent Sayı *</label>
+                    <input type="number" id="maxPatients" value="10">
+                </div>
+                <div class="form-group full">
+                    <label>Həkim və Təsvir</label>
+                    <textarea id="description" rows="2" placeholder="Məs: Dr. Rəşad Əliyev - EKQ müayinəsi"></textarea>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn-save" id="submitBtn">Yeni Sessiya Əlavə Et</button>
+                <button type="button" class="btn-cancel" id="cancelBtn" onclick="resetForm()">Ləğv Et</button>
+            </div>
+        </form>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Müayinə</th>
+                    <th>Həkim / Təsvir</th>
+                    <th>Otaq</th>
+                    <th>Tarix</th>
+                    <th>Max Pasiyent</th>
+                    <th>Əməliyyatlar</th>
+                </tr>
+            </thead>
+            <tbody id="sessionsTableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+    const apiUrl = '/api/medicalsessions';
+
+    document.addEventListener('DOMContentLoaded', loadSessions);
+
+    // 1. GET - Bütün məlumatları yükləmək
+    async function loadSessions() {
+        const response = await fetch(apiUrl);
+        const sessions = await response.json();
+        const tbody = document.getElementById('sessionsTableBody');
+        tbody.innerHTML = '';
+
+        sessions.forEach(s => {
+            const formattedDate = new Date(s.sessionDate).toLocaleString('az-AZ', {
+                year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+            });
+            tbody.innerHTML += `
+                <tr>
+                    <td>${s.id}</td>
+                    <td><strong>${s.title}</strong></td>
+                    <td>${s.description}</td>
+                    <td>${s.roomNumber}</td>
+                    <td>${formattedDate}</td>
+                    <td>${s.maxPatients}</td>
+                    <td>
+                        <button class="btn-edit" onclick="editSession(${s.id})">Düzəliş</button>
+                        <button class="btn-delete" onclick="deleteSession(${s.id})">Sil</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // 2. POST və PUT - Yaratmaq və Yeniləmək
+    document.getElementById('sessionForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const id = document.getElementById('sessionId').value;
+        const data = {
+            title: document.getElementById('title').value,
+            description: document.getElementById('description').value,
+            roomNumber: document.getElementById('roomNumber').value,
+            sessionDate: document.getElementById('sessionDate').value || new Date().toISOString(),
+            maxPatients: parseInt(document.getElementById('maxPatients').value) || 0
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `${apiUrl}/${id}` : apiUrl;
+
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showAlert(id ? 'Müayinə uğurla yeniləndi!' : 'Yeni müayinə əlavə olundu!', 'success');
+            resetForm();
+            loadSessions();
+        } else {
+            const errorData = await response.json();
+            showAlert(errorData.message || 'Xəta baş verdi!', 'error');
+        }
+    });
+
+    // 3. Redaktə üçün formu doldurmaq
+    async function editSession(id) {
+        const response = await fetch(`${apiUrl}/${id}`);
+        if (response.ok) {
+            const s = await response.json();
+            document.getElementById('sessionId').value = s.id;
+            document.getElementById('title').value = s.title;
+            document.getElementById('description').value = s.description;
+            document.getElementById('roomNumber').value = s.roomNumber;
+            document.getElementById('sessionDate').value = s.sessionDate.slice(0, 16);
+            document.getElementById('maxPatients').value = s.maxPatients;
+
+            document.getElementById('submitBtn').textContent = 'Yadda Saxla (Yenilə)';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+        }
+    }
+
+    // 4. DELETE - Silmək
+    async function deleteSession(id) {
+        if (!confirm('Bu müayinə sessiyasını silmək istədiyinizə əminsiniz?')) return;
+
+        const response = await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            showAlert('Sessiya silindi!', 'success');
+            loadSessions();
+        }
+    }
+
+    function resetForm() {
+        document.getElementById('sessionForm').reset();
+        document.getElementById('sessionId').value = '';
+        document.getElementById('submitBtn').textContent = 'Yeni Sessiya Əlavə Et';
+        document.getElementById('cancelBtn').style.display = 'none';
+    }
+
+    function showAlert(message, type) {
+        const box = document.getElementById('alertBox');
+        box.textContent = message;
+        box.className = `alert alert-${type}`;
+        box.style.display = 'block';
+        setTimeout(() => box.style.display = 'none', 4000);
+    }
+    </script>
+
+</body>
+</html>
